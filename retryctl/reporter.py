@@ -1,109 +1,82 @@
-"""Aggregate run results and emit a human-readable summary report."""
+"""Summary reporting for retry runs."""
 
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Optional
 
 from retryctl.metrics import RunMetrics
-from retryctl.output import CapturedOutput, OutputConfig, format_output, truncate_for_alert
 
-log = logging.getLogger(__name__)
-
-_STATUS_OK = "\u2705"   # ✅
-_STATUS_FAIL = "\u274c"  # ❌
-_DIVIDER = "-" * 60
+logger = logging.getLogger(__name__)
 
 
 def _duration_str(seconds: float) -> str:
-    if seconds < 60:
-        return f"{seconds:.2f}s"
-    m, s = divmod(int(seconds), 60)
-    return f"{m}m {s}s"
+    """Format a duration in seconds as a human-readable string."""
+    td = timedelta(seconds=seconds)
+    total = int(td.total_seconds())
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
 
 
-def build_summary(
-    metrics: RunMetrics,
-    command: str,
-    captured: Optional[CapturedOutput] = None,
-    output_config: Optional[OutputConfig] = None,
-) -> str:
-    """Return a multi-line summary string for a completed run."""
-    status_icon = _STATUS_OK if metrics.succeeded else _STATUS_FAIL
-    status_word = "SUCCEEDED" if metrics.succeeded else "FAILED"
-
+def build_summary(metrics: RunMetrics, command: str) -> dict:
+    """Build a structured summary dict from run metrics."""
     duration = (
-        (metrics.finished_at - metrics.started_at).total_seconds()
-        if metrics.finished_at and metrics.started_at
+        (metrics.ended_at - metrics.started_at)
+        if metrics.ended_at and metrics.started_at
         else 0.0
     )
-
-    lines = [
-        _DIVIDER,
-        f"{status_icon}  retryctl run {status_word}",
-        f"   command   : {command}",
-        f"   attempts  : {metrics.total_attempts}",
-        f"   duration  : {_duration_str(duration)}",
+    failed_attempts = [
+        a for a in metrics.attempts if not a.succeeded
     ]
-
-    if metrics.attempts:
-        last = metrics.attempts[-1]
-        lines.append(f"   exit code : {last.exit_code}")
-        if last.error:
-            lines.append(f"   error     : {last.error}")
-
-    if metrics.total_attempts > 1:
-        delays = [a.delay_before for a in metrics.attempts if a.delay_before > 0]
-        if delays:
-            total_wait = sum(delays)
-            lines.append(f"   total wait: {_duration_str(total_wait)}")
-
-    if captured is not None and output_config is not None:
-        formatted = format_output(captured, output_config, succeeded=metrics.succeeded)
-        if formatted:
-            lines.append("")
-            lines.append("   --- output ---")
-            for ol in formatted.splitlines():
-                lines.append(f"   {ol}")
-
-    lines.append(_DIVIDER)
-    return "\n".join(lines)
+    return {
+        "command": command,
+        "succeeded": metrics.succeeded,
+        "total_attempts": metrics.total_attempts,
+        "failed_attempts": len(failed_attempts),
+        "duration_seconds": round(duration, 3),
+        "duration_human": _duration_str(duration),
+        "exit_codes": [a.exit_code for a in metrics.attempts],
+        "delays": [a.delay_before for a in metrics.attempts if a.delay_before],
+    }
 
 
-def log_summary(
-    metrics: RunMetrics,
-    command: str,
-    captured: Optional[CapturedOutput] = None,
-    output_config: Optional[OutputConfig] = None,
-) -> None:
-    """Write the summary to the logger at the appropriate level."""
-    summary = build_summary(metrics, command, captured, output_config)
-    if metrics.succeeded:
-        log.info(summary)
-    else:
-        log.error(summary)
-
-
-def alert_body(
-    metrics: RunMetrics,
-    command: str,
-    captured: Optional[CapturedOutput] = None,
-    max_output_chars: int = 500,
-) -> str:
-    """Return a compact string suitable for embedding in an alert payload."""
-    status = "SUCCEEDED" if metrics.succeeded else "FAILED"
-    last_code = metrics.attempts[-1].exit_code if metrics.attempts else "?"
-    body = (
-        f"retryctl run {status}\n"
-        f"command: {command}\n"
-        f"attempts: {metrics.total_attempts}, exit_code: {last_code}\n"
+def log_summary(metrics: RunMetrics, command: str) -> None:
+    """Log a human-readable summary of the retry run."""
+    summary = build_summary(metrics, command)
+    status = "succeeded" if summary["succeeded"] else "failed"
+    logger.info(
+        "retryctl run %s | command=%r attempts=%d duration=%s",
+        status,
+        summary["command"],
+        summary["total_attempts"],
+        summary["duration_human"],
     )
-    if captured:
-        combined = ""
-        if captured.stderr:
-            combined = captured.stderr
-        elif captured.stdout:
-            combined = captured.stdout
-        if combined:
-            body += "\noutput:\n" + truncate_for_alert(combined, max_output_chars)
-    return body
+    if not summary["succeeded"]:
+        logger.warning(
+            "All %d attempt(s) failed. Exit codes: %s",
+            summary["failed_attempts"],
+            summary["exit_codes"],
+        )
+
+
+def alert_body(metrics: RunMetrics, command: str) -> str:
+    """Produce a plain-text alert body suitable for email/webhook payloads."""
+    summary = build_summary(metrics, command)
+    lines = [
+        f"retryctl alert: command {'SUCCEEDED' if summary['succeeded'] else 'FAILED'}",
+        f"Command   : {summary['command']}",
+        f"Attempts  : {summary['total_attempts']}",
+        f"Duration  : {summary['duration_human']}",
+        f"Exit codes: {summary['exit_codes']}",
+    ]
+    if summary["delays"]:
+        lines.append(f"Delays (s): {summary['delays']}")
+    return "\n".join(lines)
