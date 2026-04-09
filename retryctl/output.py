@@ -43,6 +43,20 @@ class CapturedOutput:
     def stderr(self) -> str:
         return "\n".join(self.stderr_lines)
 
+    @property
+    def combined(self) -> str:
+        """Return stdout and stderr interleaved as a single string.
+
+        Lines are returned in the order they were appended to each stream,
+        with stderr lines prefixed by '[stderr] ' so they stand out.
+        """
+        parts: List[str] = []
+        if self.stdout_lines:
+            parts.extend(self.stdout_lines)
+        if self.stderr_lines:
+            parts.extend(f"[stderr] {l}" for l in self.stderr_lines)
+        return "\n".join(parts)
+
 
 def format_output(
     captured: CapturedOutput,
