@@ -80,3 +80,19 @@ def alert_body(metrics: RunMetrics, command: str) -> str:
     if summary["delays"]:
         lines.append(f"Delays (s): {summary['delays']}")
     return "\n".join(lines)
+
+
+def format_attempts_table(metrics: RunMetrics) -> str:
+    """Return a simple text table of per-attempt details.
+
+    Each row shows the attempt number, exit code, whether it succeeded,
+    and the delay that preceded it (if any).
+    """
+    header = f"{'#':>4}  {'Exit':>6}  {'OK':>4}  {'Delay (s)':>10}"
+    separator = "-" * len(header)
+    rows = [header, separator]
+    for i, attempt in enumerate(metrics.attempts, start=1):
+        delay = f"{attempt.delay_before:.2f}" if attempt.delay_before else "    -"
+        ok = "yes" if attempt.succeeded else "no"
+        rows.append(f"{i:>4}  {attempt.exit_code:>6}  {ok:>4}  {delay:>10}")
+    return "\n".join(rows)
