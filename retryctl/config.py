@@ -1,21 +1,17 @@
-"""Configuration loading for retryctl — supports TOML and env-var overrides."""
+"""Configuration loading for retryctl."""
+
+from __future__ import annotations
 
 import os
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import List, Optional
+from typing import Any
 
 from retryctl.backoff import BackoffConfig, BackoffStrategy
-from retryctl.alerts import AlertChannel, AlertConfig
+from retryctl.alerts import AlertConfig, AlertChannel
+from retryctl.ratelimit import RateLimitConfig
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_CONFIG_PATHS = [
-    Path("retryctl.toml"),
-    Path(".retryctl.toml"),
-    Path.home() / ".config" / "retryctl" / "config.toml",
-]
 
 
 @dataclass
@@ -23,24 +19,25 @@ class RetryCtlConfig:
     max_attempts: int = 3
     backoff: BackoffConfig = field(default_factory=BackoffConfig)
     alerts: AlertConfig = field(default_factory=AlertConfig)
-    shell: str = "/bin/sh"
-    capture_output: bool = True
+    rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
 
 
-def _load_toml(path: Path) -> dict:
+def _load_toml(path: str) -> dict[str, Any]:
     try:
-        import tomllib  # Python 3.11+
+        import tomllib  # type: ignore
     except ImportError:
         try:
-            import tomli as tomllib  # type: ignore[no-redef]
+            import tomli as tomllib  # type: ignore
         except ImportError:
-            logger.debug("No TOML library available, skipping config file")
             return {}
-    with path.open("rb") as f:
-        return tomllib.load(f)
+    try:
+        with open(path, "rb") as fh:
+            return tomllib.load(fh)
+    except FileNotFoundError:
+        return {}
 
 
-def _parse_backoff(raw: dict) -> BackoffConfig:
+def _parse_backoff(raw: dict[str, Any]) -> BackoffConfig:
     strategy_str = raw.get("strategy", "fixed").upper()
     strategy = BackoffStrategy[strategy_str]
     return BackoffConfig(
@@ -52,42 +49,49 @@ def _parse_backoff(raw: dict) -> BackoffConfig:
     )
 
 
-def _parse_alerts(raw: dict) -> AlertConfig:
-    channels = [
-        AlertChannel(c) for c in raw.get("channels", ["log"])
-    ]
+def _parse_alerts(raw: dict[str, Any]) -> AlertConfig:
+    channel_str = raw.get("channel", "log").upper()
+    channel = AlertChannel[channel_str]
     return AlertConfig(
-        channels=channels,
-        email_to=raw.get("email_to"),
-        email_from=raw.get("email_from"),
-        smtp_host=raw.get("smtp_host", "localhost"),
-        smtp_port=int(raw.get("smtp_port", 25)),
-        webhook_url=raw.get("webhook_url"),
-        min_attempts_before_alert=int(raw.get("min_attempts_before_alert", 1)),
+        channel=channel,
+        threshold=int(raw.get("threshold", 1)),
+        email_to=raw.get("email_to", ""),
+        webhook_url=raw.get("webhook_url", ""),
     )
 
 
-def load_config(path: Optional[Path] = None) -> RetryCtlConfig:
-    """Load config from file (auto-discovered or explicit) with env-var overrides."""
-    raw: dict = {}
-    config_path = path
-    if config_path is None:
-        for candidate in DEFAULT_CONFIG_PATHS:
-            if candidate.exists():
-                config_path = candidate
-                break
-    if config_path and config_path.exists():
-        logger.debug("Loading config from %s", config_path)
-        raw = _load_toml(config_path)
-
-    backoff = _parse_backoff(raw.get("backoff", {}))
-    alerts = _parse_alerts(raw.get("alerts", {}))
-
-    cfg = RetryCtlConfig(
-        max_attempts=int(os.environ.get("RETRYCTL_MAX_ATTEMPTS", raw.get("max_attempts", 3))),
-        backoff=backoff,
-        alerts=alerts,
-        shell=os.environ.get("RETRYCTL_SHELL", raw.get("shell", "/bin/sh")),
-        capture_output=bool(raw.get("capture_output", True)),
+def _parse_rate_limit(raw: dict[str, Any]) -> RateLimitConfig:
+    return RateLimitConfig(
+        max_attempts_per_window=int(raw.get("max_attempts_per_window", 0)),
+        window_seconds=float(raw.get("window_seconds", 60.0)),
     )
-    return cfg
+
+
+def load_config(path: str = "retryctl.toml") -> RetryCtlConfig:
+    """Load configuration from *path*, falling back to environment variables and defaults."""
+    raw = _load_toml(path)
+
+    max_attempts = int(
+        os.environ.get("RETRYCTL_MAX_ATTEMPTS", raw.get("max_attempts", 3))
+    )
+
+    backoff_raw = raw.get("backoff", {})
+    if "RETRYCTL_BACKOFF_STRATEGY" in os.environ:
+        backoff_raw["strategy"] = os.environ["RETRYCTL_BACKOFF_STRATEGY"]
+
+    alerts_raw = raw.get("alerts", {})
+    if "RETRYCTL_ALERT_CHANNEL" in os.environ:
+        alerts_raw["channel"] = os.environ["RETRYCTL_ALERT_CHANNEL"]
+
+    rate_limit_raw = raw.get("rate_limit", {})
+    if "RETRYCTL_RATE_LIMIT_MAX" in os.environ:
+        rate_limit_raw["max_attempts_per_window"] = int(
+            os.environ["RETRYCTL_RATE_LIMIT_MAX"]
+        )
+
+    return RetryCtlConfig(
+        max_attempts=max_attempts,
+        backoff=_parse_backoff(backoff_raw),
+        alerts=_parse_alerts(alerts_raw),
+        rate_limit=_parse_rate_limit(rate_limit_raw),
+    )
