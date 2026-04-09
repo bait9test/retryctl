@@ -22,6 +22,20 @@ class FilterConfig:
     # Exit codes that should immediately abort retrying (never retried).
     fatal_exit_codes: List[int] = field(default_factory=list)
 
+    def validate(self) -> None:
+        """Raise ValueError if the configuration contains obvious mistakes.
+
+        Checks:
+        - No exit code appears in both retryable_exit_codes and fatal_exit_codes,
+          which would be contradictory.
+        """
+        overlap = set(self.retryable_exit_codes) & set(self.fatal_exit_codes)
+        if overlap:
+            codes = ", ".join(str(c) for c in sorted(overlap))
+            raise ValueError(
+                f"Exit codes cannot be both retryable and fatal: {codes}"
+            )
+
 
 def is_retryable(
     exit_code: int,
