@@ -21,3 +21,20 @@ def watch_config_to_dict(cfg: WatchConfig) -> dict:
         "debounce": cfg.debounce,
         "max_triggers": cfg.max_triggers,
     }
+
+
+def merge_watch(base: dict, override: dict) -> WatchConfig:
+    """Merge two raw config dicts and return the resulting WatchConfig.
+
+    Values in *override* take precedence over those in *base*.  Both dicts
+    are expected to be top-level RetryCtlConfig dicts (i.e. they may contain
+    a ``[watch]`` sub-table among other keys).
+
+    Example::
+
+        merged = merge_watch(default_cfg, user_cfg)
+    """
+    base_section = base.get("watch", {})
+    override_section = override.get("watch", {})
+    merged_section = {**base_section, **override_section}
+    return WatchConfig.from_dict(merged_section)
