@@ -77,3 +77,28 @@ def write_audit_entry(entry: AuditEntry, cfg: AuditConfig) -> None:
             fh.write(json.dumps(entry.to_dict()) + "\n")
     except OSError as exc:
         log.warning("audit: could not write to %s: %s", cfg.audit_file, exc)
+
+
+def read_audit_entries(cfg: AuditConfig) -> list[AuditEntry]:
+    """Read and parse all entries from the audit log file.
+
+    Returns an empty list if the file does not exist or auditing is disabled.
+    Skips lines that cannot be parsed, logging a warning for each.
+    """
+    if not cfg.enabled:
+        return []
+    path = Path(cfg.audit_file)
+    if not path.exists():
+        return []
+    entries: list[AuditEntry] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for lineno, line in enumerate(fh, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                entries.append(AuditEntry(**data))
+            except (json.JSONDecodeError, TypeError) as exc:
+                log.warning("audit: skipping malformed entry at line %d: %s", lineno, exc)
+    return entries
