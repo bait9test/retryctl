@@ -54,3 +54,19 @@ def redact(text: str, cfg: RedactConfig) -> str:
 def redact_env(env: dict, cfg: RedactConfig) -> dict:
     """Return a copy of *env* with values redacted according to *cfg*."""
     return {k: redact(v, cfg) for k, v in env.items()}
+
+
+def redact_dict(data: dict, cfg: RedactConfig) -> dict:
+    """Return a copy of *data* with all string values redacted according to *cfg*.
+
+    Non-string values are left untouched. Nested dicts are recursed into.
+    """
+    result = {}
+    for k, v in data.items():
+        if isinstance(v, dict):
+            result[k] = redact_dict(v, cfg)
+        elif isinstance(v, str):
+            result[k] = redact(v, cfg)
+        else:
+            result[k] = v
+    return result
