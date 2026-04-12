@@ -39,7 +39,13 @@ def _load_toml(path: str) -> dict[str, Any]:
 
 def _parse_backoff(raw: dict[str, Any]) -> BackoffConfig:
     strategy_str = raw.get("strategy", "fixed").upper()
-    strategy = BackoffStrategy[strategy_str]
+    try:
+        strategy = BackoffStrategy[strategy_str]
+    except KeyError:
+        valid = ", ".join(s.name for s in BackoffStrategy)
+        raise ValueError(
+            f"Unknown backoff strategy {strategy_str!r}. Valid options: {valid}"
+        )
     return BackoffConfig(
         strategy=strategy,
         base_delay=float(raw.get("base_delay", 1.0)),
@@ -51,7 +57,13 @@ def _parse_backoff(raw: dict[str, Any]) -> BackoffConfig:
 
 def _parse_alerts(raw: dict[str, Any]) -> AlertConfig:
     channel_str = raw.get("channel", "log").upper()
-    channel = AlertChannel[channel_str]
+    try:
+        channel = AlertChannel[channel_str]
+    except KeyError:
+        valid = ", ".join(c.name for c in AlertChannel)
+        raise ValueError(
+            f"Unknown alert channel {channel_str!r}. Valid options: {valid}"
+        )
     return AlertConfig(
         channel=channel,
         threshold=int(raw.get("threshold", 1)),
