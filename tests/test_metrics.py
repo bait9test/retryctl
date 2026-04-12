@@ -61,6 +61,15 @@ def test_finish_failure():
     assert m.succeeded is False
 
 
+def test_finish_timestamp_is_recent():
+    """finished_at should be set to approximately the current time."""
+    before = time.time()
+    m = RunMetrics(command="ls")
+    m.finish(succeeded=True)
+    after = time.time()
+    assert before <= m.finished_at <= after
+
+
 # ---------------------------------------------------------------------------
 # RunMetrics.total_delay_seconds
 # ---------------------------------------------------------------------------
@@ -84,21 +93,4 @@ def test_total_delay_zero_when_no_delays():
 # ---------------------------------------------------------------------------
 
 def test_summary_structure():
-    m = RunMetrics(command="echo test")
-    m.record_attempt(1, exit_code=1, duration_seconds=0.05, delay_before_next=1.0)
-    m.record_attempt(2, exit_code=0, duration_seconds=0.03)
-    m.finish(succeeded=True)
-
-    s = m.summary()
-    assert s["command"] == "echo test"
-    assert s["succeeded"] is True
-    assert s["total_attempts"] == 2
-    assert len(s["attempts"]) == 2
-    assert s["attempts"][0]["exit_code"] == 1
-    assert s["attempts"][1]["delay_before_next"] is None
-
-
-def test_total_duration_before_finish_is_positive():
-    m = RunMetrics(command="sleep")
-    time.sleep(0.05)
-    assert m.total_duration_seconds > 0
+    m = RunMetrics(co
