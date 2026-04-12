@@ -34,6 +34,11 @@ def run_command_with_env(
     """Run *cmd* with the environment resolved from *cfg*.
 
     Any additional keyword arguments are forwarded to ``subprocess.run``.
+
+    Raises:
+        subprocess.TimeoutExpired: If a ``timeout`` kwarg is provided and the
+            command exceeds it.
+        FileNotFoundError: If *cmd[0]* cannot be found on PATH.
     """
     kwargs = build_subprocess_kwargs(
         cfg,
