@@ -56,6 +56,10 @@ class TraceContext:
             "started_at": self.started_at,
         }
 
+    def elapsed(self) -> float:
+        """Return the number of seconds elapsed since this context was created."""
+        return time.time() - self.started_at
+
 
 def new_trace(cfg: TraceConfig) -> TraceContext:
     """Create a fresh TraceContext, reusing cfg.trace_id if provided."""
@@ -64,10 +68,19 @@ def new_trace(cfg: TraceConfig) -> TraceContext:
     return TraceContext(trace_id=trace_id, span_id=span_id)
 
 
-def write_trace_record(ctx: TraceContext, path: str) -> None:
-    """Append a JSON trace record to *path*."""
+def write_trace_record(ctx: TraceContext, path: str, extra: Optional[dict] = None) -> None:
+    """Append a JSON trace record to *path*.
+
+    Args:
+        ctx: The trace context to record.
+        path: Filesystem path to append the record to.
+        extra: Optional dict of additional fields to merge into the record.
+    """
     record = ctx.to_dict()
     record["written_at"] = time.time()
+    record["elapsed"] = ctx.elapsed()
+    if extra:
+        record.update(extra)
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("a") as fh:
