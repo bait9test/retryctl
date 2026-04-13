@@ -27,7 +27,11 @@ def splay_config_to_dict(cfg: SplayConfig) -> dict[str, Any]:
 
 
 def maybe_apply_splay(cfg: SplayConfig) -> float:
-    """Apply splay delay if enabled; log the chosen delay and return it."""
+    """Apply splay delay if enabled; log the chosen delay and return it.
+
+    Returns the number of seconds slept (0.0 if splay is disabled or
+    max_seconds is non-positive).
+    """
     if not cfg.enabled or cfg.max_seconds <= 0:
         return 0.0
     delay = compute_splay(cfg)
@@ -43,3 +47,21 @@ def describe_splay(cfg: SplayConfig) -> str:
     if not cfg.enabled:
         return "splay disabled"
     return f"splay up to {cfg.max_seconds:.1f}s"
+
+
+def validate_splay_config(cfg: SplayConfig) -> list[str]:
+    """Validate a SplayConfig and return a list of human-readable warnings.
+
+    Does not raise; callers can decide how to handle the returned warnings.
+    """
+    warnings: list[str] = []
+    if cfg.enabled and cfg.max_seconds <= 0:
+        warnings.append(
+            f"splay is enabled but max_seconds={cfg.max_seconds!r} is not positive; "
+            "splay will have no effect"
+        )
+    if cfg.max_seconds < 0:
+        warnings.append(
+            f"max_seconds={cfg.max_seconds!r} is negative, which is not meaningful"
+        )
+    return warnings
