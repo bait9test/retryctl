@@ -76,5 +76,10 @@ def load_snapshots(cfg: SnapshotConfig, key: str) -> list[SnapshotEntry]:
     src = dest / f"{safe_key}.json"
     if not src.exists():
         return []
-    raw = json.loads(src.read_text())
+    try:
+        raw = json.loads(src.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise RuntimeError(f"failed to load snapshots from {src}: {exc}") from exc
+    if not isinstance(raw, list):
+        raise RuntimeError(f"unexpected snapshot format in {src}: expected a list")
     return [SnapshotEntry(**r) for r in raw]
