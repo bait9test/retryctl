@@ -72,3 +72,16 @@ def run_post_hooks(config: HookConfig, *, succeeded: bool) -> None:
         dispatch_hooks(config.on_success, "on_success")
     else:
         dispatch_hooks(config.on_failure, "on_failure")
+
+
+def has_any_hooks(config: HookConfig) -> bool:
+    """Return True if the config has at least one hook configured.
+
+    Useful for skipping hook-related setup when no hooks are defined.
+    """
+    return bool(
+        config.pre_command
+        or config.post_command
+        or config.on_success
+        or config.on_failure
+    )
