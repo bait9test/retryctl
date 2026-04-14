@@ -40,3 +40,25 @@ def describe_stagger(cfg: StaggerConfig) -> str:
         f"stagger enabled: worker {cfg.worker_index}/{cfg.total_workers}, "
         f"delay={delay:.3f}s (interval={cfg.interval_seconds}s)"
     )
+
+
+def validate_stagger_config(cfg: StaggerConfig) -> list[str]:
+    """Validate a StaggerConfig and return a list of error messages.
+
+    Returns an empty list if the configuration is valid.  Callers can
+    treat a non-empty return value as a validation failure and surface
+    the messages to the user before attempting to apply the stagger.
+    """
+    errors: list[str] = []
+    if cfg.interval_seconds < 0:
+        errors.append("interval_seconds must be >= 0")
+    if cfg.total_workers < 1:
+        errors.append("total_workers must be >= 1")
+    if cfg.worker_index < 0:
+        errors.append("worker_index must be >= 0")
+    if cfg.worker_index >= cfg.total_workers:
+        errors.append(
+            f"worker_index ({cfg.worker_index}) must be less than "
+            f"total_workers ({cfg.total_workers})"
+        )
+    return errors
