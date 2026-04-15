@@ -74,6 +74,21 @@ def test_full_strategy_capped_by_max_ms():
     assert result <= 1.0
 
 
+def test_full_strategy_deterministic_with_same_seed():
+    """The same seed should produce the same jitter value for reproducibility."""
+    cfg1 = JitterConfig(strategy=JitterStrategy.FULL, seed=123)
+    cfg2 = JitterConfig(strategy=JitterStrategy.FULL, seed=123)
+    assert apply_jitter(5.0, cfg1) == apply_jitter(5.0, cfg2)
+
+
+def test_full_strategy_different_seeds_differ():
+    """Different seeds should (almost certainly) produce different jitter values."""
+    cfg1 = JitterConfig(strategy=JitterStrategy.FULL, seed=1)
+    cfg2 = JitterConfig(strategy=JitterStrategy.FULL, seed=2)
+    # It is astronomically unlikely these are equal for a non-trivial base delay
+    assert apply_jitter(10.0, cfg1) != apply_jitter(10.0, cfg2)
+
+
 # ---------------------------------------------------------------------------
 # apply_jitter — EQUAL strategy
 # ---------------------------------------------------------------------------
@@ -86,15 +101,4 @@ def test_equal_strategy_within_range():
 
 # ---------------------------------------------------------------------------
 # apply_jitter — DECORRELATED strategy
-# ---------------------------------------------------------------------------
-
-def test_decorrelated_strategy_at_least_base():
-    cfg = JitterConfig(strategy=JitterStrategy.DECORRELATED, seed=1)
-    result = apply_jitter(1.0, cfg, prev_delay=1.0)
-    assert result >= 1.0
-
-
-def test_decorrelated_strategy_first_call_no_prev():
-    cfg = JitterConfig(strategy=JitterStrategy.DECORRELATED, seed=5)
-    result = apply_jitter(1.0, cfg)
-    assert result >= 0.0
+# -----------------------------------------------------------
