@@ -36,6 +36,17 @@ skip_on_fail = true  # skip the main attempt instead of aborting the run
 4. If `skip_on_fail = false` the failure is logged and the main command runs
    regardless.
 
+> **Note:** Probe retries are independent of the main command's retry counter.
+> A skipped attempt still counts as one attempt toward the main command's
+> `max_attempts` limit.
+
+## Exit codes
+
+The probe command is considered successful when it exits with code `0`.  Any
+non-zero exit code (or a timeout) is treated as a failure.  If you need to
+accept additional exit codes as success, wrap the command in a small shell
+script that normalises the exit code before returning.
+
 ## Example
 
 ```toml
