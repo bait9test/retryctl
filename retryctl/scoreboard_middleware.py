@@ -46,3 +46,19 @@ def describe_scoreboard(cfg: ScoreboardConfig, key: Optional[str] = None) -> str
             f"(ratio={v['ratio']})"
         )
     return "\n".join(lines)
+
+
+def is_key_healthy(cfg: ScoreboardConfig, key: str, min_ratio: float = 0.5) -> bool:
+    """Return True if the success ratio for *key* meets *min_ratio* (0.0–1.0).
+
+    Returns True when the scoreboard is disabled or there is no data yet,
+    so callers can treat an absent history as healthy by default.
+    """
+    if not cfg.enabled:
+        return True
+    tracker = ScoreboardTracker.load(cfg)
+    summary = tracker.summary(key=key)
+    entry = summary.get(key)
+    if entry is None or entry["attempts"] == 0:
+        return True
+    return entry["ratio"] >= min_ratio
