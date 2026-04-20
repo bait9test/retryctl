@@ -64,3 +64,17 @@ class StampTracker:
 
     def to_list(self) -> List[Dict]:
         return [s.to_dict() for s in self._stamps]
+
+    def elapsed(self, from_attempt: int = 1) -> Optional[float]:
+        """Return wall-clock seconds elapsed between the first recorded stamp
+        for *from_attempt* and the most recent stamp.
+
+        Returns None if there are fewer than two stamps or if *from_attempt*
+        is not found.
+        """
+        if len(self._stamps) < 2:
+            return None
+        start = self.get(from_attempt)
+        if start is None:
+            return None
+        return self._stamps[-1].wall - start.wall
