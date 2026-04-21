@@ -46,7 +46,15 @@ class GateBlocked(Exception):
 
 
 def check_gate(cfg: GatingConfig) -> None:
-    """Run the gate command. Raises GateBlocked if it exits non-zero."""
+    """Run the gate command. Raises GateBlocked if it exits non-zero.
+
+    Args:
+        cfg: The gating configuration to use.
+
+    Raises:
+        GateBlocked: If the gate command exits with a non-zero code, or if the
+            command itself fails and ``allow_on_error`` is ``False``.
+    """
     if not cfg.enabled or not cfg.command:
         return
     try:
@@ -56,6 +64,15 @@ def check_gate(cfg: GatingConfig) -> None:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+    except subprocess.TimeoutExpired as exc:
+        log.warning(
+            "gating: gate command timed out after %.1fs (allowing through: %s)",
+            cfg.timeout,
+            cfg.allow_on_error,
+        )
+        if cfg.allow_on_error:
+            return
+        raise GateBlocked(cfg.command, -1) from exc
     except Exception as exc:  # noqa: BLE001
         if cfg.allow_on_error:
             log.warning("gating: gate command error (allowing through): %s", exc)
